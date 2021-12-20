@@ -41,18 +41,36 @@ class calceshell(cmd2.Cmd):
         self.prompt = getpass.getuser()+"@"+socket.gethostname()+":"+str(os.getcwd())+"$ \n>"       
         return stop
 
-    def do_ir(self,dest):    
-        print(dest)
-        try:
-            print(os.path.abspath(dest))
-            os.chdir(os.path.abspath(dest))
+
+    irParser = Cmd2ArgumentParser()
+    irParser.add_argument('dst', nargs=(0,1), default=" ", help='Directorio al cual se quiere ir, para subir un ..')
+    @with_argparser(irParser)
+    def do_ir(self,dest): 
+
+        #si se pone sin argumentos
+        if dest.dst == " ":            
+            os.chdir(os.path.expanduser("~")) #ir al directorio $HOME del usuario
+        else:
             
-        except:
-            print("ERROR: Not a valid path")
+            dest.dst=os.path.abspath(os.path.expanduser(dest.dst))
+            
+            if not isdir(dest.dst):
+                self.perror("No es un directorio valido")
+                
+            elif not os.access(dest.dst,  os.R_OK):
+                self.perror("No se tiene acceso de lectura al directorio")
+                
+            else:
+                try:
+                    os.chdir(dest.dst)
+                except Exception as ex:
+                    self.perror(ex)
+            
+        return
 
     # Enable tab completion for cd command
     def complete_ir(self, text, line, begidx, endidx):
-        return self.path_complete(text, line, begidx, endidx, path_filter=os.path.isdir)
+        return self.path_complete(text, line, begidx, endidx)
 
 
 
@@ -87,7 +105,10 @@ class calceshell(cmd2.Cmd):
     listarParser.add_argument('dir', nargs=(0,1),default=" ", help='ruta al directorio')
 
     @with_argparser(listarParser)
-    def do_listar(self, opt): 
+    def do_listar(self, opt):
+        #fix por si se meta la virgula :V
+        opt.dir=os.path.expanduser(opt.dir) 
+        #print(os.path.abspath(opt.dir))
         if opt.dir==" ":            
             archivos = os.listdir(os.getcwd())
             for f in archivos:
