@@ -92,7 +92,7 @@ class calceshell(cmd2.Cmd):
                     self.stdout.write('🗃 '+f)
                 self.stdout.write("    ")
         else:
-            #self.poutput(dest)
+            #self.poutput(dest) 
             #argc = os.listdir(os.path.join(os.getcwd(),command[1]))
             dest = os.listdir(os.path.abspath(dest))
             for f in dest:
