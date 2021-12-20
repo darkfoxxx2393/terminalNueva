@@ -4,9 +4,9 @@ Bg,
 Fg,
 style,
 )
+from cmd2 import Cmd2ArgumentParser, with_argparser
 from os.path import isdir, isfile
 from pathlib import Path
-from posix import listdir
 import subprocess
 import sys
 import readline
@@ -16,9 +16,11 @@ import socket
 import time
 import shutil
 import hashlib
+from cmd2.table_creator import EMPTY
 import psutil
 from ftplib import FTP
 from time import *
+import argparse
 
 readline.parse_and_bind("tab: complete")
 
@@ -81,41 +83,70 @@ class calceshell(cmd2.Cmd):
 
     do_cd=do_ir  #cd es interno de la shell y un proceso no puede cambiar el cwd de otro proceso
 
-    def do_listar(self, dest): 
-        cami=dest       
-        if dest == "":
-            dest = os.listdir(os.path.join(os.getcwd()))
-            for f in dest:
-                if isdir(os.getcwd()+f):
+    listarParser = Cmd2ArgumentParser()
+    listarParser.add_argument('dir', nargs=(0,1),default=" ", help='ruta al directorio')
+
+    @with_argparser(listarParser)
+    def do_listar(self, opt): 
+        if opt.dir==" ":            
+            archivos = os.listdir(os.getcwd())
+            for f in archivos:
+                if isdir(f):
                     self.stdout.write('📂 '+f)
                 else:
                     self.stdout.write('🗃 '+f)
                 self.stdout.write("    ")
         else:
-            #self.poutput(dest) 
-            #argc = os.listdir(os.path.join(os.getcwd(),command[1]))
-            dest = os.listdir(os.path.abspath(dest))
-            for f in dest:
-                #print(str(os.path.abspath(cami))+f)
-                if isdir(str(os.path.abspath(cami))+f): 
+            if isfile(opt.dir):
+                self.perror("La ruta especificada no es un directorio válido o el directorio no existe")
+                return
+        #lista los archivos y directorios correspondientes a la ruta especificada           
+            archivos = os.listdir(os.path.abspath(opt.dir))
+            for f in archivos:
+                #print(os.path.abspath(opt.dir))                
+                if isdir((os.path.abspath(opt.dir))+"/"+f): 
                     self.stdout.write('📂 '+f)
                 else:
                     self.stdout.write('🗃 '+f)
-                self.stdout.write("    ")    
+                self.stdout.write("    ")  
+                  
         self.stdout.write("\n")    
-        return 0
+        return
 
     def complete_listar(self, text, line, begidx, endidx):
-        return self.path_complete(text, line, begidx, endidx, path_filter=os.path.isdir)
+        return self.path_complete(text, line, begidx, endidx)
 
     def do_tiempoEncendido(self, line):
         self.poutput(strftime("%H:%M:%S", gmtime()))    
         self.poutput(strftime("%Hh%Mm", gmtime(round(time()-psutil.boot_time()))))
         #self.poutput("Carga promedio:",[str(x) for x in os.getloadavg()])  #FALTA FIXEAR ESTE NO LE GUSTA AL POUTPUT
         #    /var/run/utmp
-        return 0
+        return
 
-    
+
+
+    copiarparser = Cmd2ArgumentParser()
+    #copiarparser.add_argument('files', nargs=2, help='copiar $src $dst, copiar el archivo/directorio src al directorio dst')
+    copiarparser.add_argument('src',nargs=1,help='El archivo o directorio fuente')
+    copiarparser.add_argument('dst',nargs=1,help='El archivo o directorio destino')
+    @with_argparser(copiarparser)
+    def do_copiar(self, opt):
+        #command[1] es el directorio de origen del archivo que queremos mover (creo que solo nombre de archivo (?))
+        #command[2] es el el directorio de destino del archivo
+        print(opt.src)
+        print(opt.dst)
+        # origin = os.path.join(os.getcwd(),command[1])
+        # destiny = os.path.join(os.getcwd(),command[2])
+        # try:
+        #     if isdir(origin):
+        #         shutil.copytree(os.path.join(command[1]),os.path.join(command[2]))
+        #         print(f"Se copió la carpeta {command[1]} a {command[2]}")
+        #     else:        
+        #         shutil.copy(os.path.join(command[1]),os.path.join(command[2]))
+        #         print(f"Se copio el archivo {command[1]} a {command[2]}")
+        # except:
+        #     print("Error:No se pudo realizar la copia")
+        # return 0    
 if __name__ == '__main__':
     shell=calceshell()
     sys.exit(shell.cmdloop())
