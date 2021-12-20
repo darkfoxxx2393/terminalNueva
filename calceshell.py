@@ -30,7 +30,7 @@ class calceshell(cmd2.Cmd):
         #SE PUEDE METER ESTOS DOS PARA TENER ARCHIVO DE HISTORIA Y SCRIPT PARA CONFIGURAR TIPO calceshell.rc
         #persistent_history_file='cmd2_history.dat',startup_script='scripts/startup.txt'
         self.default_to_shell = True
-        self.intro = style('calceShell 2021 para SO1!', fg=Fg.RED, bg=Bg.BLACK, bold=True) + ' 😀📁📂🗎🖻🖹🖿🗀🗁'
+        self.intro = style('calceShell 2021 para SO1!', fg=Fg.RED, bg=Bg.BLACK, bold=True) + ' 😀📁📂🗃🗎🖻🖹🖿🗀🗁'
         self.prompt=prompt = getpass.getuser()+"@"+socket.gethostname()+":"+str(os.getcwd())+"$ \n>"
 
     def postcmd(self, stop: bool, line: str) -> bool: #FUNCION QUE SE EJECUTA LUEGO DE CADA COMANDO AQUI SE PUEDE HOOCKEAR EL CAMBIO DE PROMPT!!!!!
@@ -87,9 +87,9 @@ class calceshell(cmd2.Cmd):
             dest = os.listdir(os.path.join(os.getcwd()))
             for f in dest:
                 if isdir(os.getcwd()+f):
-                    self.stdout.write('🗀 '+f)
+                    self.stdout.write('📂 '+f)
                 else:
-                    self.stdout.write('🗎 '+f)
+                    self.stdout.write('🗃 '+f)
                 self.stdout.write("    ")
         else:
             #self.poutput(dest)
@@ -98,9 +98,9 @@ class calceshell(cmd2.Cmd):
             for f in dest:
                 #print(str(os.path.abspath(cami))+f)
                 if isdir(str(os.path.abspath(cami))+f): 
-                    self.stdout.write('🗀 '+f)
+                    self.stdout.write('📂 '+f)
                 else:
-                    self.stdout.write('🗎 '+f)
+                    self.stdout.write('🗃 '+f)
                 self.stdout.write("    ")    
         self.stdout.write("\n")    
         return 0
