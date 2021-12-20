@@ -1,3 +1,4 @@
+from re import S
 import cmd2 
 from cmd2 import (
 Bg,
@@ -148,26 +149,37 @@ class calceshell(cmd2.Cmd):
 
     copiarparser = Cmd2ArgumentParser()
     #copiarparser.add_argument('files', nargs=2, help='copiar $src $dst, copiar el archivo/directorio src al directorio dst')
-    copiarparser.add_argument('src',nargs=1,help='El archivo o directorio fuente')
-    copiarparser.add_argument('dst',nargs=1,help='El archivo o directorio destino')
+    copiarparser.add_argument('src',nargs=1,type=str,help='El archivo o directorio fuente')
+    copiarparser.add_argument('dst',nargs=1,type=str,help='El archivo o directorio destino')
     @with_argparser(copiarparser)
     def do_copiar(self, opt):
-        #command[1] es el directorio de origen del archivo que queremos mover (creo que solo nombre de archivo (?))
-        #command[2] es el el directorio de destino del archivo
+        
+        #if isdir(str(opt.src)):
+        opt.src=os.path.abspath(os.path.expanduser(opt.src[0]))
+        #if isdir(str(opt.dst)):
+        opt.dst=os.path.abspath(os.path.expanduser(opt.dst[0]))
+        #opt.dst=os.path.abspath(os.path.expanduser(opt.dst))
         print(opt.src)
         print(opt.dst)
+
+        if not os.path.exists(opt.src):
+            self.perror("ALV no se puede copiar algo que no existe :V")
+        
+        
         # origin = os.path.join(os.getcwd(),command[1])
         # destiny = os.path.join(os.getcwd(),command[2])
-        # try:
-        #     if isdir(origin):
-        #         shutil.copytree(os.path.join(command[1]),os.path.join(command[2]))
-        #         print(f"Se copió la carpeta {command[1]} a {command[2]}")
-        #     else:        
-        #         shutil.copy(os.path.join(command[1]),os.path.join(command[2]))
-        #         print(f"Se copio el archivo {command[1]} a {command[2]}")
-        # except:
-        #     print("Error:No se pudo realizar la copia")
-        # return 0    
+        #try:
+        if isdir(opt.src):
+            shutil.copytree(opt.src,opt.dst,dirs_exist_ok=True)
+            self.poutput(f"Se copio el directorio {os.path.basename(opt.src)} a {opt.dst}")
+        else:        
+            shutil.copy(opt.src,opt.dst)
+            self.poutput(f"Se copio el archivo {os.path.basename(opt.src)} a {opt.dst}")
+        #except:
+            #self.perror("No se pudo realizar la copia")
+        return
+    def complete_copiar(self, text, line, begidx, endidx):
+        return self.path_complete(text, line, begidx, endidx)
 if __name__ == '__main__':
     shell=calceshell()
     sys.exit(shell.cmdloop())
