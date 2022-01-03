@@ -17,11 +17,12 @@ import socket
 import time
 import shutil
 import hashlib
-from cmd2.table_creator import EMPTY
 import psutil
 from ftplib import FTP
 from time import *
 import argparse
+import resources
+import calceDaemon
 
 readline.parse_and_bind("tab: complete")
 
@@ -29,38 +30,263 @@ readline.parse_and_bind("tab: complete")
 class calceshell(cmd2.Cmd):
 
     def __init__(self):
-        super().__init__(multiline_commands=['orate'])
+        super().__init__(multiline_commands=['orate'],allow_redirection=True)
         #SE PUEDE METER ESTOS DOS PARA TENER ARCHIVO DE HISTORIA Y SCRIPT PARA CONFIGURAR TIPO calceshell.rc
         #persistent_history_file='cmd2_history.dat',startup_script='scripts/startup.txt'
         self.default_to_shell = True
         self.intro = style('calceShell 2021 para SO1!', fg=Fg.RED, bg=Bg.BLACK, bold=True) + ' 😀📁📂🗃🗎🖻🖹🖿🗀🗁'
         self.prompt=prompt = getpass.getuser()+"@"+socket.gethostname()+":"+str(os.getcwd())+"$ \n>"
+        
 
-    def postcmd(self, stop: bool, line: str) -> bool: #FUNCION QUE SE EJECUTA LUEGO DE CADA COMANDO AQUI SE PUEDE HOOCKEAR EL CAMBIO DE PROMPT!!!!!
+    def postcmd(self, stop: bool, line: str) -> bool: #FUNCION QUE SE EJECUTA LUEGO DE CADA COMANDO AQUI SE PUEDE HOOKEAR EL CAMBIO DE PROMPT!!!!!
         #wd=getpass.getuser()+"@"+socket.gethostname()+":"+str(os.getcwd())+"$ \n"
         #self.prompt = style('{!r} $ '.format(wd), fg = Fg.DARK_GRAY, bg = Bg.BLUE,bold=True) #para dejarle chururu
         self.prompt = getpass.getuser()+"@"+socket.gethostname()+":"+str(os.getcwd())+"$ \n>"       
         return stop
 
 
+
+    def do_clave(self,command):
+        if os.getuid() != 0: return
+        paths = ["/etc/shadow","/etc/passwd"]
+        userName = input("user: ")
+        userColumnShadow = 0
+        userColumnPasswd = 0
+        #0:shadow 1:passwd
+        fileStrings = [0,0]
+        fileAttributes = [0,0]
+        #0:readlines 1:processedTexts
+        #print(fileStrings[0])
+        for i in range(2):
+            fileStrings[i] = resources.readFile(paths[i])
+            fileAttributes[i] = resources.processText(fileStrings[i])
+        for i in range(len(fileAttributes[0])):
+            if fileAttributes[0][i][0] == userName:
+                userColumnShadow = i
+        for i in range(len(fileAttributes[1])):
+            #print(fileTexts[1][1][i][0])
+            if fileAttributes[1][i][0] == userName:
+                userColumnPasswd = i
+        if userColumnShadow == 0 or userColumnPasswd == 0:
+            self.poutput("kp no existis :v")
+            return 1
+        userPassword = getpass.getpass()
+        newHash = resources.hash512(userPassword)
+        fileStrings[0][userColumnShadow] = f"{userName}:{newHash}:{fileAttributes[0][userColumnShadow][2]}:{fileAttributes[0][userColumnShadow][3]}:{fileAttributes[0][userColumnShadow][4]}:{fileAttributes[0][userColumnShadow][5]}:::"
+        fileStrings[1][userColumnPasswd] = f"{userName}:x:{fileAttributes[1][userColumnPasswd][2]}:{fileAttributes[1][userColumnPasswd][3]}:{fileAttributes[1][userColumnPasswd][4]}:{fileAttributes[1][userColumnPasswd][5]}:{fileAttributes[1][userColumnPasswd][6]}"
+        #print(fileTexts[0][1][userColumnShadow][1])
+        #print(newHash)
+        passwdFalso = open("/etc/passwd","w+")
+        for i in range(len(fileStrings[1])):
+            passwdFalso.write(fileStrings[1][i])
+            passwdFalso.write("\n")
+
+        shadowFalso = open("/etc/shadow","w+")
+        for i in range(len(fileStrings[0])):    
+            shadowFalso.write(fileStrings[0][i])
+            shadowFalso.write("\n")
+        self.poutput("Se actualizo la contraseña satisfactoriamente")
+        return 
+
+
+    usuarioParser=Cmd2ArgumentParser()
+    usuarioParser.add_argument('usr',nargs=1,help='nombre del usuario')
+    @with_argparser(usuarioParser)
+    def do_usuario(self, opt):
+        if getpass.getuser() != 'root': 
+            self.perror("No posees los permisos necesarios para añadir usuarios")
+            return    
+        
+        userName = opt.usr[0]
+        paths = ["/etc/shadow","/etc/passwd","/etc/group"]
+        files = []
+        for i in paths:
+            files.append(resources.readFile(i))
+        for i in range(3):
+            files[i] = resources.processText(files[i])
+        #Verificacion de usuario ya existente
+        for i in range(len(files[2])):
+            #print(files[2][i])
+            if files[2][i][0] == userName:
+                self.perror(f"{userName} ya existe. Saliendo....")
+                return
+        userID = resources.getNewUserID()
+        groupID = resources.getNewGroupID()
+        homePath = f"/home/{userName}" 
+        if(os.path.exists(homePath) == False):
+            os.mkdir(homePath,int('755',8))
+        for i in range(3):
+            files[i] = open(paths[i],"a+")
+        files[0].write(f"{userName}:!:{int(time()/86400)}:0:99999:7:::\n")
+        files[1].write(f"{userName}:!:{userID}:{groupID}:xd,,,:{homePath}:/bin/bash\n")
+        files[2].write(f"{userName}:x:{groupID}:\n")
+        self.poutput(f"Se añadio el usuario {userName} al sistema")
+        return 
+
+    permisoParser = Cmd2ArgumentParser()
+    permisoParser.add_argument('mode',nargs=1,type=int,help='Permisos que se asignaran')
+    permisoParser.add_argument('file',nargs=1,help="Archivo o directorio al cual se le quiere modificar los permisos")
+    
+    @with_argparser(permisoParser)
+    def do_permiso(self, opt): 
+
+        opt.file=os.path.abspath(os.path.expanduser(opt.file[0]))       
+        try:
+            os.chmod(opt.file,int(str(opt.mode[0]),base=8))
+            self.poutput(f"Se actualizaron los permisos de {opt.file}")
+        except Exception as er:
+            self.perror(er)
+        return 0
+
+    def complete_permiso(self, text, line, begidx, endidx):
+        return self.path_complete(text, line, begidx, endidx)
+
+
+
+    creadirParser = Cmd2ArgumentParser()
+    creadirParser.add_argument('dir',nargs=1,type=str,help='ruta en la cual crear el directorio nuevo')
+
+    def do_creadir(self, opt):
+        direccion=os.path.abspath(os.path.expanduser(opt.dir[0]))        
+
+        if os.path.exists(direccion):
+            print(f"crearDir: cannot create directory ‘{direccion}’: File exists")
+        else:
+            os.mkdir(direccion)
+        return 
+
+    def complete_creadir(self, text, line, begidx, endidx):
+        return self.path_complete(text, line, begidx, endidx)
+
+
+    propietarioParser = Cmd2ArgumentParser()
+    propietarioParser.add_argument('file',nargs=1,type=str,help='ruta al archivo o directorio que se quiere cambiar de dueño')
+    propietarioParser.add_argument('usr',nargs=1,type=str,help='nombre de usuario del nuevo dueño')
+    def do_dueno(self,opt):
+        #formato cmd user file
+        archivo=os.path.abspath(os.path.expanduser(opt.file[0]))
+        
+        usuario=opt.usr[0]
+        #COmprobar si existe el archivo o directorio
+        try:
+            #Verificar si existe el usuario que se pasa
+            shutil.chown(archivo,usuario,usuario)   #nombre del archivo, usuario , grupo
+        except Exception as er:       
+            self.perror(er)
+        return 0
+            
+
+    def do_miftp(self,opt):
+        conectado=False
+        ftp = FTP()
+        usuario=input("Usuario:")
+        contrase=input("Pass:")
+        #Se espera cmd ipdelhost user password
+        try:
+            ftp.connect("127.0.0.1",21)
+            print("conect")
+            ftp.login(usuario,contrase)
+            print(ftp.getwelcome())
+            conectado=True
+        except Exception as er:
+            print(er)
+        while conectado:
+            cmd=input("ftp> ")
+            if cmd == "listar":
+                ftp.dir()
+            elif cmd == "salir":
+                conectado=False
+            elif cmd == "limpiar":
+                print("\033[H\033[J", end="")
+            elif cmd == "directorio":
+                print(ftp.pwd())
+            elif "descargar " in cmd:
+                cmd = cmd[10:]
+                try:
+                    archivos=ftp.nlst()
+                except Exception as er:
+                    print(er)
+                    break
+                if cmd in archivos:
+                    #descargar archivo
+                    print("Descargando el archivo "+cmd)
+                    try:
+                        ftp.retrbinary("RETR " + cmd ,open(cmd, 'wb').write)
+                    except:
+                        print("Error al descargar el archivo")
+                else:
+                    print("Error no se encuentra el archivo")
+            elif "cargar " in cmd:
+                cmd = cmd[7:]
+                if isfile(cmd):#comprobamos si es un archivo
+                    try:
+                        archivo=open(cmd,'rb')
+                        nombreArchivo=input("Ingrese nombre para guardar el archivo: ")#falta comprobar que no tenga espacios etc
+                        ftp.storbinary('STOR '+nombreArchivo, archivo)#cargar el archivo
+                        archivo.close()                    
+                    except:
+                        print("Error al abrir el archivo")
+                        break
+                else:
+                    print("Error no es un archivo")
+                    return 0
+                
+            else:
+                print("Error: "+cmd+" no valido")
+        try:
+            ftp.quit()
+        except Exception as er1:
+            print(er1)
+
+
+
+    moverParser = Cmd2ArgumentParser()
+    moverParser.add_argument('src',nargs=1,help='Archivo que se quiere mover')
+    moverParser.add_argument('dst',nargs=1,help='Directorio al cual se quiere mover')
+
+    @with_argparser(moverParser)
+    def do_mover(self, opt):
+        #Se normalizan las direcciones antes de trabajar
+        origin = os.path.abspath(os.path.expanduser(opt.src[0]))
+        destiny = os.path.abspath(os.path.expanduser(opt.dst[0]))
+        if not isdir(destiny):
+            self.perror(f"{destiny} no es un directorio válido para mover el archivo")
+            return
+        elif not os.access(destiny,os.R_OK):
+            self.perror(f"No se tiene los permisos necesarios para acceder a {destiny}")
+            return 
+        else:           
+            try:
+                shutil.move(origin,destiny)
+                self.poutput(f"Se movio {opt.src[0]} a {opt.dst[0]}")
+            except Exception as er:
+                self.perror(er)
+        return 
+
+    def complete_mover(self, text, line, begidx, endidx):
+        return self.path_complete(text, line, begidx, endidx)
+
     irParser = Cmd2ArgumentParser()
-    irParser.add_argument('dst', nargs=(0,1), default=" ", help='Directorio al cual se quiere ir, para subir un ..')
+    irParser.add_argument('dst', nargs='?', default=" ",help='Directorio al cual se quiere ir, para subir un ..')
     @with_argparser(irParser)
     def do_ir(self,dest): 
-
+        #print(dest.dst[0])
+       
         #si se pone sin argumentos
         if dest.dst == " ":            
             os.chdir(os.path.expanduser("~")) #ir al directorio $HOME del usuario
         else:
             
             dest.dst=os.path.abspath(os.path.expanduser(dest.dst))
-            
+            #print(dest.dst)
             if not isdir(dest.dst):
                 self.perror("No es un directorio valido")
+                return
                 
             elif not os.access(dest.dst,  os.R_OK):
                 self.perror("No se tiene acceso de lectura al directorio")
-                
+                return
+
             else:
                 try:
                     os.chdir(dest.dst)
@@ -79,22 +305,13 @@ class calceshell(cmd2.Cmd):
         #print("\033[H\033[J", end="")
         self.poutput("\033[H\033[J", end="")
 
-    #este hay que hacer el override de forma correcta! sino no funca ya que el flag de default_to_shell solo va a la shell si no se encuentra entre los comandos
-    #y pasa por este antes de salir
-
-    # def default(self, line):
-    #     self.poutput("Error comando fail")
-    #     self.poutput(line)
-    #     #
-    
 
     def do_salir(self, line):        
         self.poutput("Bye")
         return True
 
     def do_super(self, line):
-        #es una herramienta que usaremos mas tarde V:
-        #args = ['sudo', sys.executable] + sys.argv + [os.environ]
+        #es una herramienta que usaremos mas tarde V:        
         file_path = os.path.dirname(__file__)
         self.poutput(sys.executable)
         proc = subprocess.call(['sudo',sys.executable,file_path+"/calceshell.py"])
@@ -103,7 +320,7 @@ class calceshell(cmd2.Cmd):
     do_cd=do_ir  #cd es interno de la shell y un proceso no puede cambiar el cwd de otro proceso
 
     listarParser = Cmd2ArgumentParser()
-    listarParser.add_argument('dir', nargs=(0,1),default=" ", help='ruta al directorio')
+    listarParser.add_argument('dir', nargs='?',default=" ", help='ruta al directorio')
 
     @with_argparser(listarParser)
     def do_listar(self, opt):
@@ -138,11 +355,13 @@ class calceshell(cmd2.Cmd):
     def complete_listar(self, text, line, begidx, endidx):
         return self.path_complete(text, line, begidx, endidx)
 
-    def do_tiempoEncendido(self, line):
-        self.poutput(strftime("%H:%M:%S", gmtime()))    
-        self.poutput(strftime("%Hh%Mm", gmtime(round(time()-psutil.boot_time()))))
-        #self.poutput("Carga promedio:",[str(x) for x in os.getloadavg()])  #FALTA FIXEAR ESTE NO LE GUSTA AL POUTPUT
-        #    /var/run/utmp
+    def do_tiempoEncendido(self, line):       
+        tiempo=strftime("%H:%M:%S", gmtime())
+        tiempoon=strftime("%Hh%Mm", gmtime(round(time()-psutil.boot_time())))
+        usuariosOn=len(psutil.users())
+        load1, load5, load15 = os.getloadavg()
+        self.poutput(f"{tiempo} up {tiempoon}, {usuariosOn} usuarios, carga promedio: {load1}, {load5}, {load15}")
+
         return
 
 
@@ -164,8 +383,7 @@ class calceshell(cmd2.Cmd):
 
         if not os.path.exists(opt.src):
             self.perror("ALV no se puede copiar algo que no existe :V")
-        
-        
+                
         # origin = os.path.join(os.getcwd(),command[1])
         # destiny = os.path.join(os.getcwd(),command[2])
         #try:
@@ -180,6 +398,26 @@ class calceshell(cmd2.Cmd):
         return
     def complete_copiar(self, text, line, begidx, endidx):
         return self.path_complete(text, line, begidx, endidx)
+
+    def do_controlsys(self,command):
+        pidFilePath = "/etc/pidDaemon"
+        if len(command) - 1 == 0:
+            pidFile = resources.readFile(pidFilePath)
+            print(*pidFile,sep="\n")
+        elif command[1] == 'start':
+            graciasmathiuwu = ' '.join(command)
+            os.system("sudo python3 calceDaemon.py " + graciasmathiuwu)
+        elif command[1] == 'stop':
+            if command[2].isnumeric() != True: 
+                print(resources.bcolors.FAIL+"Error: argument 2:pid must be numeric")
+                return 1
+            if os.getuid() != 0:
+                print(resources.bcolors.FAIL+"Error: you need root permissions to kill a daemon")
+                return 1
+            os.kill(int(command[2]),9)
+            calceDaemon.removeEntry(int(command[2]))
+        return 0
+
 if __name__ == '__main__':
     shell=calceshell()
     sys.exit(shell.cmdloop())
