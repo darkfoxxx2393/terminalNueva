@@ -4,22 +4,22 @@ import os
 from posix import listdir
 import subprocess
 import shutil
+import shell
 import getpass
 import hashlib
 import psutil
-import time
+from time import *
 import sys
 import resources
-import time
 import getpass
+import calceDaemon
 from ftplib import FTP
-systemPid = 0
+
+
 def password(command):
     if os.getuid() != 0: return 1
-    check = 0
-    userPassword = 1
     paths = ["/etc/shadow","/etc/passwd"]
-    userName = input("keusuariokerescambiarXDDD: ")
+    userName = input("user: ")
     userColumnShadow = 0
     userColumnPasswd = 0
     #0:shadow 1:passwd
@@ -27,8 +27,6 @@ def password(command):
     fileAttributes = [0,0]
     #0:readlines 1:processedTexts
     #print(fileStrings[0])
-    shutil.copy(paths[0],os.getcwd())
-    shutil.copy(paths[1],os.getcwd())
     for i in range(2):
         fileStrings[i] = resources.readFile(paths[i])
         fileAttributes[i] = resources.processText(fileStrings[i])
@@ -42,28 +40,22 @@ def password(command):
     if userColumnShadow == 0 or userColumnPasswd == 0:
         print("kp no existis :v")
         return 1
-    while userPassword == check:
-        userPassword = getpass.getpass("Ingrese su nueva clave: ")
-        check = getpass.getpass("Verifique su ingreso: ")
-
-    newHash = f"$6${hashlib.sha512(str(userPassword).encode('utf-8')).hexdigest()}"
+    userPassword = getpass.getpass()
+    newHash = resources.hash512(userPassword)
     fileStrings[0][userColumnShadow] = f"{userName}:{newHash}:{fileAttributes[0][userColumnShadow][2]}:{fileAttributes[0][userColumnShadow][3]}:{fileAttributes[0][userColumnShadow][4]}:{fileAttributes[0][userColumnShadow][5]}:::"
     fileStrings[1][userColumnPasswd] = f"{userName}:x:{fileAttributes[1][userColumnPasswd][2]}:{fileAttributes[1][userColumnPasswd][3]}:{fileAttributes[1][userColumnPasswd][4]}:{fileAttributes[1][userColumnPasswd][5]}:{fileAttributes[1][userColumnPasswd][6]}"
     #print(fileTexts[0][1][userColumnShadow][1])
-    """for i in range(len(fileStrings[0])):
-        print(fileStrings[0][i])
-    print("===================================================")
-    for i in range(len(fileAttributes[1])):
-        print(fileStrings[1][i])"""
     #print(newHash)
-    passwdFalso = open("passwdFake","w+")
+    passwdFalso = open("/etc/passwd","w+")
     for i in range(len(fileStrings[1])):
         passwdFalso.write(fileStrings[1][i])
         passwdFalso.write("\n")
-    shadowFalso = open("shadowFake","w+")
+
+    shadowFalso = open("/etc/shadow","w+")
     for i in range(len(fileStrings[0])):    
         shadowFalso.write(fileStrings[0][i])
         shadowFalso.write("\n")
+    print("Se actualizo la contrasena satisfactoriamente")
     return 0
 
 def adduser(command):
@@ -83,6 +75,7 @@ def adduser(command):
         files[i] = resources.processText(files[i])
     #Verificacion de usuario ya existente
     for i in range(len(files[2])):
+        print(files[2][i])
         if files[2][i][0] == userName:
             print(f"{userName} already exists. Exiting...")
             return 1
@@ -118,7 +111,9 @@ def cd(command):
         os.chdir(os.path.abspath(path))
     except:
         print("ERROR: Not a valid path")
-    return 0  
+    return 0
+
+#NUEVO MOD    
 def cp(command):
     #command[1] es el directorio de origen del archivo que queremos mover (creo que solo nombre de archivo (?))
     #command[2] es el el directorio de destino del archivo
@@ -134,6 +129,7 @@ def cp(command):
     except:
         print("Error:No se pudo realizar la copia")
     return 0
+
 def mv(command):
     #command[1] es el directorio de origen del archivo que queremos mover (creo que solo nombre de archivo (?))
     #command[2] es el el directorio de destino del archivo
@@ -145,11 +141,12 @@ def mv(command):
     except:
         print("Pero que bobito no sabe usar el comando xD")
     return 0
+
 def pmod(command):
     print(command)
     try:
-        os.chmod(command[0],333)
-        print(f"{command[0]} permissions changed")
+        os.chmod(command[2],int(command[1], base=8))
+        print(f"{command[2]} permissions changed")
     except OSError:
             print("ERROR: Not a valid path")
     except Exception:
@@ -174,10 +171,10 @@ def rename(command):
     return 0
 #NUEVO
 def uptime(command):
-    print(time.strftime("%H:%M:%S", time.gmtime()))    
-    print(time.strftime("%Hh%Mm", time.gmtime(round(time.time()-psutil.boot_time()))))
+    print(strftime("%H:%M:%S", gmtime()))    
+    print(strftime("%Hh%Mm", gmtime(round(time()-psutil.boot_time()))))
     print("Carga promedio:",[str(x) for x in os.getloadavg()])
-    #/var/run/utmp
+    #    /var/run/utmp
     return 0
 #NUEVO
 def cat(command):
@@ -196,8 +193,6 @@ def cat(command):
             print("Error al abrir el archivo")
     else:
         print("Error no es un archivo")
-    return 0
-def startstopDaemon():
     return 0
 def ftp(command):
     conectado=False
@@ -239,13 +234,27 @@ def ftp(command):
                     print("Error al descargar el archivo")
             else:
                 print("Error no se encuentra el archivo")
+        elif "cargar " in cmd:
+            cmd = cmd[7:]
+            if isfile(cmd):#comprobamos si es un archivo
+                try:
+                    archivo=open(cmd,'rb')
+                    nombreArchivo=input("Ingrese nombre para guardar el archivo: ")#falta comprobar que no tenga espacios etc
+                    ftp.storbinary('STOR '+nombreArchivo, archivo)#cargar el archivo
+                    archivo.close()                    
+                except:
+                    print("Error al abrir el archivo")
+                    break
+            else:
+                print("Error no es un archivo")
+                return 0
+            
         else:
             print("Error: "+cmd+" no valido")
     try:
         ftp.quit()
     except Exception as er1:
         print(er1)
-
 def chown(command):
     #formato cmd user file
     archivo=Path(command[2])
@@ -258,30 +267,42 @@ def chown(command):
     return 0
           
 def root(command):
-    
     #es una herramienta que usaremos mas tarde V:
     #args = ['sudo', sys.executable] + sys.argv + [os.environ]
     file_path = os.path.dirname(__file__)
-
     #print(file_path)
     proc = subprocess.call(['sudo',sys.executable,file_path+"/shell.py"])
-
     return 0
 def exitT(command):
     sys.exit()
     return 0
-
-commandFunction = [cd,cp,clear,pmod,mv,ls,mkdir,rename,adduser,password,uptime,cat,startstopDaemon,ftp,chown,root,exitT]
+def daemon(command):
+    pidFilePath = "/etc/pidDaemon"
+    if len(command) - 1 == 0:
+        pidFile = resources.readFile(pidFilePath)
+        print(*pidFile,sep="\n")
+    elif command[1] == 'start':
+        graciasmathiuwu = ' '.join(command)
+        os.system("sudo python3 calceDaemon.py " + graciasmathiuwu)
+    elif command[1] == 'stop':
+        if command[2].isnumeric() != True: 
+            print(resources.bcolors.FAIL+"Error: argument 2:pid must be numeric")
+            return 1
+        if os.getuid() != 0:
+            print(resources.bcolors.FAIL+"Error: you need root permissions to kill a daemon")
+            return 1
+        os.kill(int(command[2]),9)
+        calceDaemon.removeEntry(int(command[2]))
+    return 0
+commandFunction = [cd,cp,clear,pmod,mv,ls,mkdir,rename,adduser,password,uptime,cat,daemon,ftp,chown,root,exitT]
 commandList = ["ir", "copiar", "limpiar","permisos","mover","listar","crearDir","renombrar","addUsuario","contrasena","tiempoOn","concatenar","controlSys","clientFtp","propietario","super","salir"]
-argNumber = [[1],[2],[0],[1],[2],[1,0],[1],[2],[1],[0],[0],[1],[],[0],[2],[0],[0]]
+argNumber = [[1],[2],[0],[2],[2],[1,0],[1],[2],[1],[0],[0],[1],[x for x in range(100)],[0],[2],[0],[0]]
 #cantidad maxima de argumentos
-
 def caller(command):
     argErrorFlag = True #Solo se activa si la cantidad de parametros es incorrecta
     out = resources.bcolors.FAIL+'ERROR:'+resources.bcolors.WARNING+'command not found or subprocess failed'+resources.bcolors.ENDC
     foundCommand = False
     argc = len(command) - 1
-    
     commandCounter = len(commandFunction)
     #print(f"commandFunctionLen: {len(commandFunction)}") #PARA DEBUG
     #print(f"commandListLen: {len(commandList)}")
@@ -294,7 +315,6 @@ def caller(command):
         for i in range(commandCounter):
                 for j in range(len(argNumber[i])):
                     if(command[0] == commandList[i] and argc == argNumber[i][j]):
-                        addEntry(sys.argv,os.getpid())
                         commandFunction[i](command)
                         argErrorFlag = False
         if argErrorFlag: print(resources.bcolors.FAIL+"ERROR: argument quantity mismatch"+resources.bcolors.ENDC)
@@ -302,69 +322,9 @@ def caller(command):
         #print(command) 
         try:
             if command[0]=="cd":
-                addEntry(sys.argv,os.getpid())
                 cd(command)
-                removeEntry(sys.argv,os.getpid())
             else:
-                out=subprocess.Popen(command) #passthrough
-                addEntry(sys.argv,out.pid)
-                print(f"out: {out.pid}")
-                return out.pid
+                out=subprocess.run(command) #passthrough
         except:
             print(out)
     return 0
-def addEntry(command,pid):
-    pidFile = open("/etc/pidDaemon","a+")
-    pidFile.write(f"{pid}: {' '.join(command)}\n")
-    return 0
-def removeEntry(pid):
-    pidColumn = 0
-    pidFilePath = "/etc/pidDaemon"
-    pidFile = resources.readFile(pidFilePath)
-    hashTable = resources.processText(pidFile)
-    for i in range(len(hashTable)):
-        if os.getpid() == int(hashTable[i][0]):
-            pidColumn = i
-    hashTable.remove(hashTable[pidColumn])
-    os.remove(pidFilePath)
-    pidFile = open(pidFilePath,"w+")
-    for i in range(len(hashTable)):
-        pidFile.write(f"{hashTable[i][0]}: {hashTable[i][1]}\n")
-    return 0
-def main():
-    (sys.argv).remove("calceDaemon.py")
-    (sys.argv).remove("controlSys")
-    (sys.argv).remove("start")
-    systemPid = caller(sys.argv)
-    os.kill(os.getpid(),9)
-    return 0
-
-if __name__ == "__main__":
-    # do the UNIX double-fork magic, see Stevens' "Advanced 
-    # Programming in the UNIX Environment" for details (ISB-N co201563177)
-    print("alopolicia")
-    try: 
-        pid = os.fork() 
-        if pid > 0:
-            # exit first parent
-            sys.exit(0) 
-    except OSError as e: 
-        print (sys.stderr, "fork #1 failed: %d (%s)" % (e.errno, e.strerror) )
-        sys.exit(1)
-
-    # decouple from parent environment
-    os.chdir("/") 
-    os.setsid() 
-    os.umask(0) 
-
-    # do second fork
-    try: 
-        pid = os.fork() 
-        if pid > 0:
-            # exit from second parent, print eventual PID before
-            print("Daemon PID %d" % pid) 
-            sys.exit(0) 
-    except OSError as e: 
-        print (sys.stderr, "fork #2 failed: %d (%s)" % (e.errno, e.strerror)) 
-        sys.exit(1) 
-    main()

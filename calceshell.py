@@ -1,3 +1,4 @@
+import cmd
 from re import S
 import cmd2 
 from cmd2 import (
@@ -145,7 +146,7 @@ class calceshell(cmd2.Cmd):
 
     creadirParser = Cmd2ArgumentParser()
     creadirParser.add_argument('dir',nargs=1,type=str,help='ruta en la cual crear el directorio nuevo')
-
+    @with_argparser(creadirParser)
     def do_creadir(self, opt):
         direccion=os.path.abspath(os.path.expanduser(opt.dir[0]))        
 
@@ -162,6 +163,7 @@ class calceshell(cmd2.Cmd):
     propietarioParser = Cmd2ArgumentParser()
     propietarioParser.add_argument('file',nargs=1,type=str,help='ruta al archivo o directorio que se quiere cambiar de dueño')
     propietarioParser.add_argument('usr',nargs=1,type=str,help='nombre de usuario del nuevo dueño')
+    @with_argparser(propietarioParser)
     def do_dueno(self,opt):
         #formato cmd user file
         archivo=os.path.abspath(os.path.expanduser(opt.file[0]))
@@ -399,24 +401,33 @@ class calceshell(cmd2.Cmd):
     def complete_copiar(self, text, line, begidx, endidx):
         return self.path_complete(text, line, begidx, endidx)
 
-    def do_controlsys(self,command):
+    controlsysParser=Cmd2ArgumentParser()
+    controlsysParser.add_argument('cmd',nargs=1,type=str, help='llala') #corroborar que sea comando:V
+    controlsysParser.add_argument('daemon',nargs=1,type=str, help='llalaa') #opcional revisar
+    @with_argparser(controlsysParser)
+    def do_controlsys(self,opt):
+        command=opt.cmd[0]
+        print(command)
         pidFilePath = "/etc/pidDaemon"
-        if len(command) - 1 == 0:
+        if command == "running":
             pidFile = resources.readFile(pidFilePath)
             print(*pidFile,sep="\n")
-        elif command[1] == 'start':
-            graciasmathiuwu = ' '.join(command)
-            os.system("sudo python3 calceDaemon.py " + graciasmathiuwu)
-        elif command[1] == 'stop':
+        elif command == 'start':
+            #graciasmathiuwu = ' '.join(command)            
+            #print(graciasmathiuwu)
+            #subprocess.run("echo hola", shell=True, check=True)
+            os.system("sudo python3 calceDaemon.py controlSys "+command+" "+opt.daemon[0]) #lugar donde va a estar :V
+        elif command == 'stop':
             if command[2].isnumeric() != True: 
                 print(resources.bcolors.FAIL+"Error: argument 2:pid must be numeric")
-                return 1
+                return 
             if os.getuid() != 0:
                 print(resources.bcolors.FAIL+"Error: you need root permissions to kill a daemon")
-                return 1
+                return 
             os.kill(int(command[2]),9)
             calceDaemon.removeEntry(int(command[2]))
-        return 0
+
+        return 
 
 if __name__ == '__main__':
     shell=calceshell()
